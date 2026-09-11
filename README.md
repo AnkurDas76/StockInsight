@@ -1,203 +1,128 @@
 # StockInsight
 
-**AI-powered stock research and screening agent built with LangGraph, Qwen 2.5, FastAPI, and modern web technologies.**
+Agentic financial research assistant powered by LangGraph, Qwen 2.5, FastAPI, and yfinance.
 
-StockInsight is an agentic financial assistant that replaces manual ticker hunting with natural-language conversations. Users can ask about stock prices, company profiles, financial metrics, historical performance, stock screeners, or side-by-side company comparisons. 
-
-Rather than relying on rigid keyword routing, StockInsight uses an LLM-driven agentic graph to dynamically decide which financial tools to invoke, execute them against live data providers, and synthesize raw metrics into clean, structured insights.
-
-| Hero & Quick Prompts | Research & Financial Metrics |
-| :---: | :---: |
-| ![StockInsight Hero](docs/assets/stockinsight-empty.png) | ![StockInsight Research](docs/assets/stockinsight-chat.png) |
+StockInsight is an AI application for natural-language stock research. Users can ask questions about stock prices, company profiles, financial metrics, historical performance, and stock screening, while the LangGraph agent dynamically selects the appropriate research tools, queries live market data, and synthesizes structured insights.
 
 ---
 
-## ⚡ Key Features
+## Key Features
 
-- **Natural-Language Stock Research**: Conversationally query market data, earnings metrics, and price trends.
-- **Agentic Tool Calling**: The agent autonomously determines which tools are required to answer complex multi-part queries.
-- **Stock Screening**: Filter top market gainers, losers, technology stocks, and valuation candidates.
-- **Fundamental & Technical Data**: Pull real-time prices, financial statements, valuation ratios (P/E, ROE, margins), and OHLC history.
-- **Real-Time Streaming**: Stream model output token-by-token using Server-Sent Events (SSE).
-- **Persistent State Checkpointing**: State and conversation history persisted per `thread_id` via SQLite.
-- **Decoupled Architecture**: High-performance FastAPI backend paired with a modern React + Vite frontend.
-- **Observability**: Full agent execution tracing and tool monitoring integrated with LangSmith.
-
----
-
-## 🧠 How the Agent Works
-
-StockInsight executes a cyclic decision loop powered by **LangGraph** and **Qwen 2.5 (14B)**:
-
-```
-[User Query] ──▶ [LLM Agent Node] ──▶ Requires Tool? ──┬─ Yes ──▶ [Tool Execution Node] ──▶ (Feed results back to LLM)
-                                                      │
-                                                      └─ No  ──▶ [Stream Final Response]
-```
-
-1. **Evaluation**: The LLM evaluates user intent and inspects available tool definitions.
-2. **Tool Execution**: If data is needed, the graph routes execution to the specified financial research tool.
-3. **Synthesis**: Tool outputs (raw financial JSON/dictionaries) are passed back into the graph state for the LLM to format and present.
+- **Agentic Tool Selection**: Dynamically routes user queries to specialized financial research tools using LangGraph state machines.
+- **Natural-Language Stock Research**: Queries fundamentals, financial metrics, and price history in plain English.
+- **Financial Research Tools**: Integrates with `yfinance` to pull live stock prices, company profiles, financial statements, and OHLC data.
+- **Stock Screening**: Runs predefined market screens such as day gainers, technology growth, and undervalued stocks.
+- **Streaming Responses**: Delivers real-time token streaming to the frontend using FastAPI Server-Sent Events (SSE).
+- **Persistent Sessions**: Manages multi-turn conversation state across distinct sessions using SQLite checkpointing.
+- **FastAPI Backend**: Asynchronous API server handling agent execution, streaming, and session history management.
+- **LangSmith Observability**: End-to-end execution tracing for agent decision-making and tool invocations.
 
 ---
 
-## 🏗️ Architecture & Data Flow
+## How It Works
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Frontend Layer"]
-        UI["React + Vite + Tailwind CSS"]
-    end
-
-    subgraph API ["Backend API Layer"]
-        FA["FastAPI (fastapi_backend.py)"]
-        SSE["Server-Sent Events (/chat/stream)"]
-    end
-
-    subgraph Agent ["Agent Engine Layer"]
-        LG["LangGraph Workflow (backend_flow.py)"]
-        LLM["Qwen 2.5 14B (via Ollama)"]
-        Saver[("SQLite Checkpointer (chatbot.db)")]
-    end
-
-    subgraph Tools ["Financial Research Tools"]
-        T1["simple_screener"]
-        T2["get_stock_price"]
-        T3["get_company_profile"]
-        T4["get_financial_summary"]
-        T5["get_stock_history"]
-        YF[("yfinance / Yahoo Finance")]
-    end
-
-    subgraph Obs ["Observability"]
-        LS["LangSmith Tracing"]
-    end
-
-    UI <-->|HTTP / SSE| FA
-    FA <--> SSE
-    FA <--> LG
-    LG <--> Saver
-    LG <--> LLM
-    LG <--> Tools
-    Tools <--> YF
-    LG -.->|Traces| LS
+    User([User]) --> UI[React Frontend]
+    UI -->|HTTP / SSE| API[FastAPI Backend]
+    API --> Agent[LangGraph Agent Workflow]
+    Agent -->|Persist / Load State| DB[(SQLite Checkpointer)]
+    Agent <-->|LLM Invocation| LLM[Qwen 2.5 / Ollama]
+    Agent -->|Route Tool Call| Tools{Tool Node}
+    Tools -->|Fetch Financial Data| YF[yfinance API]
+    YF -->|Raw Market Data| Tools
+    Tools -->|Tool Results| Agent
+    Agent -->|Token Stream via SSE| API
+    API -->|Stream Response| UI
+    Agent -.->|Execution Traces| LS[LangSmith]
 ```
 
 ---
 
-## 🛠️ Financial Research Tools
+## Agent Tools
 
-The agent is bound to five specialized tools exposed via LangChain function calling:
+The LLM is equipped with five tools for retrieving stock and market data:
 
-| Tool | Description |
-|---|---|
-| `simple_screener` | Screens stocks using predefined Yahoo Finance market filters (day gainers, tech growth, etc.). |
-| `get_stock_price` | Fetches the latest market price, currency, and daily percentage movement for a ticker. |
-| `get_company_profile` | Retrieves business summary, sector, industry, market cap, and employee count. |
-| `get_financial_summary` | Pulls fundamental metrics including Revenue, EPS, Profit Margins, P/E ratio, Debt-to-Equity, and ROE. |
-| `get_stock_history` | Downloads historical OHLC (Open, High, Low, Close) and volume data across custom timeframes. |
+| Tool | Purpose |
+| --- | --- |
+| `simple_screener` | Stock screening using predefined market screens |
+| `get_stock_price` | Latest available price and daily change |
+| `get_company_profile` | Company and business information |
+| `get_financial_summary` | Key financial and valuation metrics |
+| `get_stock_history` | Historical OHLC and volume data |
 
----
-
-## 🌊 Streaming & Real-Time Responses
-
-StockInsight streams response tokens incrementally for a responsive chat experience:
-
-1. LangGraph streams messages in chunked tokens during graph execution.
-2. FastAPI exposes `POST /chat/stream` returning `text/event-stream`.
-3. Server-Sent Events (SSE) forward formatted JSON data payloads (`data: {"type": "token", "content": "..."}`).
-4. The React frontend parses incoming stream chunks line-by-line via `ReadableStream` and renders Markdown progressively.
+LangChain exposes these tools to the LLM via tool binding, while LangGraph manages conditional routing and tool execution within the agent loop.
 
 ---
 
-## 💾 State Persistence
+## Streaming & Persistence
 
-State checkpointing is powered by LangGraph's `SqliteSaver` connected to `chatbot.db`:
-
-- Every research interaction is isolated under a unique `thread_id`.
-- Interrupted or multi-turn research workflows preserve context across sessions.
-- Users can seamlessly switch between active and historical research threads without losing agent memory.
+- **Streaming**: FastAPI exposes a `POST /chat/stream` endpoint that streams model output tokens using Server-Sent Events (SSE). Raw internal tool output is processed and filtered on the backend before final response tokens are streamed to the frontend.
+- **Persistence**: LangGraph state is checkpointed in SQLite via `SqliteSaver`. Each chat session is tracked using a unique `thread_id`, enabling multi-turn conversation memory and session switching without state loss.
 
 ---
 
-## 🧰 Tech Stack
+## Tech Stack
 
-| Component | Technology |
-|---|---|
-| **AI & Agent** | LangGraph, LangChain, Qwen 2.5 (14B), Ollama |
-| **Backend API** | Python, FastAPI, Uvicorn, SSE |
-| **Data Provider** | yfinance (Yahoo Finance API) |
-| **Persistence** | SQLite, LangGraph `SqliteSaver` |
-| **Frontend** | React 19, Vite, Tailwind CSS v4, Lucide React, React Markdown |
-| **Observability** | LangSmith |
+- **AI & Agent Engine**: Python, LangGraph, LangChain, Qwen 2.5 (14B), Ollama
+- **Backend API**: FastAPI, Uvicorn, Server-Sent Events (SSE)
+- **Financial Data**: `yfinance` (Yahoo Finance API)
+- **Persistence**: SQLite, `SqliteSaver`
+- **Frontend**: React 19, Vite, Tailwind CSS v4
+- **Observability**: LangSmith
 
 ---
 
-## 🔌 API Endpoints
-
-FastAPI exposes the following core endpoints (`fastapi_backend.py`):
-
-- `POST /chat/stream` — Main streaming endpoint consuming a prompt and `thread_id`, returning an SSE text stream.
-- `POST /chat` — Synchronous chat endpoint returning complete assistant response object.
-- `GET /conversations` — Retrieves list of existing persistent thread IDs from SQLite checkpoints.
-- `GET /conversations/{thread_id}` — Loads full message history for a given conversation thread.
-- `POST /conversations` — Instantiates a new thread ID session.
-- `GET /health` — Returns service status and health information.
-
----
-
-## 📂 Project Structure
+## Project Structure
 
 ```
 stockScreener/
-├── backend_flow.py       # LangGraph agent workflow & state machine definition
-├── fastapi_backend.py    # FastAPI application, CORS, and SSE streaming endpoints
-├── tool.py               # yfinance tool declarations (@tool wrappers)
-├── chatbot.db            # SQLite checkpoint database
-├── frontend/             # React + Vite frontend application
-│   ├── src/
-│   │   ├── components/   # Sidebar, Header, ChatInput, MessageBubble, EmptyState
-│   │   ├── services/     # API integration & SSE stream parser (api.js)
-│   │   └── App.jsx       # Main application layout and state management
-│   ├── package.json
-│   └── vite.config.js
-├── docs/assets/          # Project documentation screenshots
-├── .env                  # Environment variables configuration
-└── README.md             # Technical project documentation
+├── backend_flow.py       # LangGraph agent graph, state, and nodes
+├── fastapi_backend.py    # FastAPI server, REST endpoints, and SSE streaming
+├── tool.py               # yfinance tool definitions (@tool functions)
+├── requirements.txt      # Python backend dependencies
+└── frontend/             # React + Vite frontend application
+    ├── src/
+    │   ├── components/   # UI components (Sidebar, ChatInput, MessageBubble)
+    │   ├── services/     # API client and SSE stream reader (api.js)
+    │   └── App.jsx       # Main application layout and state logic
+    ├── package.json      # Frontend package configuration and scripts
+    └── vite.config.js    # Vite configuration
 ```
 
 ---
 
-## 🚀 Run Locally
+## Run Locally
 
 ### 1. Prerequisites
-- **Python 3.10+**
-- **Node.js v18+** & **npm**
-- **Ollama** with Qwen 2.5 installed (`ollama pull qwen2.5:14b`)
+- Python 3.10+
+- Node.js 18+ and npm
+- Ollama installed and running
 
-### 2. Environment Configuration
-Create a `.env` file in the project root:
+### 2. Start Ollama Model
+Pull and run the Qwen 2.5 model:
+```bash
+ollama pull qwen2.5:14b
+```
+
+### 3. Configure Environment (Optional)
+Create a `.env` file in the project root to enable LangSmith tracing:
 ```env
 LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your_langsmith_api_key_here
+LANGCHAIN_API_KEY=your_langsmith_api_key
 LANGCHAIN_PROJECT=StockInsight
 ```
 
-### 3. Start Local LLM
-```bash
-ollama run qwen2.5:14b
-```
-
-### 4. Launch FastAPI Backend
-Install Python dependencies and start the API server:
+### 4. Launch Backend Server
+Install dependencies and run the FastAPI server:
 ```bash
 pip install -r requirements.txt
 python fastapi_backend.py
 ```
-The API server will run at `http://localhost:8000`.
+The backend will be available at `http://localhost:8000`.
 
-### 5. Launch React Frontend
-In a separate terminal:
+### 5. Launch Frontend
+In a separate terminal, navigate to the frontend directory and start the dev server:
 ```bash
 cd frontend
 npm install
@@ -207,24 +132,6 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 🎯 Engineering Highlights
+## Disclaimer
 
-- **Autonomous Tool Selection**: Leveraged LangGraph cyclic state graph to let LLM decide tool execution without rigid heuristic branching.
-- **Production Streaming Protocol**: Engineered SSE streaming pipeline filtering raw internal tool JSON to emit only clean assistant markdown tokens.
-- **Decoupled Architecture**: Clean separation between FastAPI backend state engine and React frontend UI.
-- **Zero-Data Loss Persistence**: Integrated SQLite checkpointing guaranteeing long-running multi-turn session persistence.
-
----
-
-## 🔮 Future Improvements
-
-- PostgreSQL backing for enterprise-scale checkpoint storage.
-- Interactive financial charting components (ApexCharts / Recharts).
-- News sentiment analysis and SEC filing research tools.
-- Automated evaluation suite for tool selection accuracy.
-
----
-
-## ⚠️ Disclaimer
-
-*StockInsight is built strictly for informational and educational purposes. Financial market data depends on upstream providers and does not constitute financial advice.*
+StockInsight is intended for educational and informational research purposes and does not provide personalized financial advice.
