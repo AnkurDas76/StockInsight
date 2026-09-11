@@ -6,7 +6,10 @@ StockInsight is an agentic financial assistant that replaces manual ticker hunti
 
 Rather than relying on rigid keyword routing, StockInsight uses an LLM-driven agentic graph to dynamically decide which financial tools to invoke, execute them against live data providers, and synthesize raw metrics into clean, structured insights.
 
-![StockInsight Interface](docs/assets/stockinsight-ui.png)
+<p align="center">
+  <img src="docs/assets/stockinsight-empty.png" width="49%" alt="StockInsight Hero & Prompt Suggestions" />
+  <img src="docs/assets/stockinsight-chat.png" width="49%" alt="StockInsight Research & Financial Metrics" />
+</p>
 
 ---
 
