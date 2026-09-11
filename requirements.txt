@@ -1,11 +1,11 @@
 
 streamlit
-
 dotenv
-
 colorama>=0.4.6
 langchain>=0.3.27
 langchain-ollama>=0.3.6
 langgraph>=0.6.1
 yfinance>=0.2.65
 langgraph-checkpoint-sqlite
+fastapi
+uvicorn[standard]
